@@ -1,0 +1,34 @@
+      body {
+        background-color: rgb(100,149,237);
+      }
+
+      #panel {
+        background-color: rgb(238,233,233);
+      }
+
+      #filterPanel {
+        margin-top: 50px;
+      }
+
+      
+      .fixed-height {
+        overflow-y: auto;
+        min-height: 900px;
+      }
+
+      #streets path {
+        stroke: rgb(200,200,200);
+        fill: rgb(245,243,238);
+      }
+
+      #arteries path, #freeways path {
+        stroke: rgb(127,127,127);
+        stroke-width: 2px;
+        fill: rgb(245,243,238);
+      }
+
+      #neighborhoods path {
+        fill: rgb(245,243,238);
+        stroke: gray;
+      }
+

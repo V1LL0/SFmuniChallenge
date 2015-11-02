@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SF muni Challenge</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="css/mystylesheet.css"/>
+  </head>
+  <body>
+  	<div class="container-fluid">
+  		<div class="row">
+  			<div class="col-md-8" id="sfMap"></div>
+  			<div class="col-md-4 fixed-height" id="panel">
+          <div id="filterPanel">
+            <h1>SF Muni Challenge</h1>
+
+            <p>SF Muni</p>
+
+            <div style="margin-top: 30px;">
+              <legend>Route Filter</legend>
+              <div class="col-md-12">
+                <!-- Possible filtering -->
+                <!-- <form class="form-group">
+                  <label>Type one or more route numbers to highlight them on the map</label>
+                  <input type="text" class="form-control" id="routeId" placeholder="e.g. kt 8ax 21 m">
+                </form> -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+    <script src="js/SFmuniChallenge.js"></script>
+
+  </body>
+</html>
