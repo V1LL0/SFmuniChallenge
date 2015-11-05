@@ -19,7 +19,7 @@ var width = sfMap.node().clientWidth,
 var svg = sfMap
 	      .append('svg')
           .attr('width', width)
-          .attr('height', height);
+          .attr('height', Math.max(height, 900) ) //ensure that the svg is big enough
 
 // time window to update the vehicles information
 var timeUpdate = 15000; // 15 sec
@@ -54,7 +54,7 @@ var stopsPerRoute = {};
 var hiddenStopsPerRoute = {};
 
 // variable to manage the show/hide of the stops
-var visibleStops = true;
+var visibleStops = false;
 
 // variable last time, to load only changed data from nextbus API
 var lastTime = 0;
@@ -72,10 +72,11 @@ function computeProjection(fileJson, callback){
 	d3.json(fileJson, function(geoJSON){
 
 		var center = d3.geo.centroid(geoJSON);
+		// change the center just a bit down and right to show the entire map correctly
+		center = [center[0]*1.00001, center[1]*1.0007];
 		var scaleFactor  = 150;
-		var scFactCorrection = 1.3;
 		var offset = [width/2, height/2];
-		projection = d3.geo.mercator().scale(scaleFactor*scFactCorrection).center(center)
+		projection = d3.geo.mercator().scale(scaleFactor).center(center)
 		    .translate(offset);
 
 		// create the path
@@ -375,7 +376,7 @@ function drawBusesAndStops(){
 				        .attr("cy", function (d) {
 				            return projection([d.coordinates[0], d.coordinates[1]])[1];
 				        })
-						.attr("r", 6)
+						.attr("r", 12)
 						.attr("fill", function (d) {
 							return '#'+d.color || '#EEEEEE'; 
 				    	})
@@ -387,9 +388,6 @@ function drawBusesAndStops(){
 										'<p><strong>Speed: </strong>'+ d.speed +' Km/h</p>'
 				    		);
 
-						})
-						.on('mouseout', function (d){
-							setTimeout(hideTooltip, 750);
 						})
 						.append('svg:title')
 							.text(function (d) {
@@ -408,7 +406,7 @@ function drawBusesAndStops(){
 					.selectAll('.stop_'+route.tag)
 					.data(stopsPerRoute[route.tag], function(d){return d.stopId || d.tag;});
 
-			var imageStopDimension = 10;
+			var imageStopDimension = 16;
 
 			stopsOnSvg
 				.enter()
@@ -416,6 +414,7 @@ function drawBusesAndStops(){
 					.attr('class', function (d){return 'stop stop_'+route.tag;})
 					.attr('id', function (d) {return d.stopId || d.tag;})
 					.append('svg:image')
+						.attr('class', 'stopImage')
 				        .attr('xlink:href', './images/bus_stop.png')
 				        .attr('x', function (d) {return projection([d.lon, d.lat])[0]-(imageStopDimension/2) ;} )
 				        .attr('y', function (d) {return projection([d.lon, d.lat])[1]-(imageStopDimension/2) ;} )
@@ -424,11 +423,7 @@ function drawBusesAndStops(){
 				        .style('visibility', visibleStops ? 'visible' : 'hidden')
 				        .on('click', function (d){
 				        	obtainPredictions(d.stopId, d3.event);
-				        })
-						.on('mouseout', function (d){
-							setTimeout(hideTooltip, 750);
-						});
-
+				        });
 
 		    stopsOnSvg
 		    	.exit().remove();

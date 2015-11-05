@@ -16,13 +16,25 @@
           <div id="sidePanel">
             <h1>SF Muni Challenge</h1>
 
-            <p>Instructions</p>
-            <div id="divInstructions">
-              <button id='showHideStops' class='btn btn-success'>Show Stops</button>
+            <div class="panel panel-default">
+              <div class="panel-heading">
+                <h3 class="panel-title">Instructions</h3>
+              </div>
+              <div class="panel-body">
+                <p> Click the buttons to show the corresponding route! </p>
+                <p> Click the Show Stops button to show or hide the bus stops. </p>
+                <p> You can also click on the elements of the map: 
+                  <ul>
+                    <li> <strong> Buses: </strong> click a bus to show a tooltip with info about the vehicle </li>
+                    <li> <strong> Bus stops: </strong> click a stop to have predictions on arrivals </li>
+                    <li> <strong> Map: </strong> click a point in the map or in the water to hide an showed tooltip </li>
+                  </ul>
+                </p>
+              </div>
             </div>
 
-
-            <p>Buses</p>
+            <h2>Buses</h2>
+            <button id='showHideStops' class='btn btn-default'>Show Stops</button>
             <div id="busesButtons">
             </div>
 
