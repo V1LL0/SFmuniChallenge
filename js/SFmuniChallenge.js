@@ -273,7 +273,7 @@ function drawPaths(){
 
 	var pathsOnSvg = svg.select('g.paths')
 						.selectAll('.routePath')
-						.data(selectedPaths);
+						.data(selectedPaths, function (d){ return d.id; });
 
 		pathsOnSvg
 			   .enter()
@@ -299,7 +299,6 @@ function drawBuses(){
 		var busesOnSvg = svg.select('g.vehicles')
 							.selectAll('.vehicle_'+route.tag)
 							.data(vehiclesPerRoute[route.tag], function(d){return d.id});
-
 
 		busesOnSvg
 				.select('circle.vehicle')
@@ -379,6 +378,7 @@ function obtainPaths(route, callback){
 					var tag   = route.attr('tag');
 					routesColor[tag] = route.attr('color');
 
+					var idPath = 1;
 					// let's save the paths for the route...
 					route
 				    	.selectAll('path')
@@ -390,7 +390,7 @@ function obtainPaths(route, callback){
 				            	coordinates.push([ +point.attr('lon'), +point.attr('lat'), 0]);
 							});
 
-							selectedPaths.push({type: 'Feature', properties: {color: route.attr('color'), routeTag: tag}, geometry: {type: 'LineString', coordinates: coordinates }});
+							selectedPaths.push({type: 'Feature', id:tag+'-'+idPath++, properties: {color: route.attr('color'), routeTag: tag}, geometry: {type: 'LineString', coordinates: coordinates }});
 						});
 		});
 
