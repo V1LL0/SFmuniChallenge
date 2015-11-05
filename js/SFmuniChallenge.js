@@ -407,8 +407,6 @@ function drawBusesAndStops(){
 		var stopsOnSvg = svg.select('g.stops')
 					.selectAll('.stop_'+route.tag)
 					.data(stopsPerRoute[route.tag], function(d){return d.stopId || d.tag;});
-			console.log('stopsPerRoute: ', stopsPerRoute[route.tag]);
-			console.log('stopsPerRoute, enter: ', stopsOnSvg.enter());
 
 			var imageStopDimension = 10;
 
@@ -416,7 +414,7 @@ function drawBusesAndStops(){
 				.enter()
 				.append('g')
 					.attr('class', function (d){return 'stop stop_'+route.tag;})
-					.attr('id', function (d) {console.log('d: ', d);return d.stopId || d.tag;})
+					.attr('id', function (d) {return d.stopId || d.tag;})
 					.append('svg:image')
 				        .attr('xlink:href', './images/bus_stop.png')
 				        .attr('x', function (d) {return projection([d.lon, d.lat])[0]-(imageStopDimension/2) ;} )
