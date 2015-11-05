@@ -21,44 +21,51 @@ var svg = sfMap
           .attr('width', width)
           .attr('height', height);
 
-
+// time window to update the vehicles information
 var timeUpdate = 15000; // 15 sec
 
+// variables for SF map elements
 var files = ['./sfmaps/neighborhoods.json', './sfmaps/streets.json', './sfmaps/arteries.json', './sfmaps/freeways.json'];
-
 var projection;
 var path;
 
-/*
-	variables for managing the routes and the vehicles
-*/
+//	variable to keep the route colors and associate them to the buses too
 var routesColor = {};
-var routesPath = [];
-var paths = [];
 
-var vehiclesPerRoute = {};
-
-// All the sf-muni routes, loaded at the application startup
+// All the sf-muni routes, loaded at the application startup, to load the buttons
 var allRoutes = [];
+
+/* 
+	managing the paths and vehicles Lazy load 
+*/
+var vehiclesPerRoute = {};
+var hiddenVehiclesPerRoute = {};
 
 // Only the loaded routes, hidden and selected
 var hiddenRoutes = [];
 var selectedRoutes = [];
+
 // Only the loaded paths, they corresponds to the routes, but they contain the information about the paths.
 var hiddenPaths = [];
 var selectedPaths = [];
 
+// variable last time, to load only changed data from nextbus API
+var lastTime = 0;
 
-/*********************************************************/
-/* Function for computing projection basing on a geoJson */
-/*********************************************************/
+
+/************************************/
+/* Compute and visualize the SF map */
+/************************************/
+
+// Function for computing projection basing on a geoJson
 function computeProjection(fileJson, callback){
 	d3.json(fileJson, function(geoJSON){
 
 		var center = d3.geo.centroid(geoJSON);
-		var scale  = 150;
+		var scaleFactor  = 150;
+		var scFactCorrection = 1.3;
 		var offset = [width/2, height/2];
-		projection = d3.geo.mercator().scale(scale).center(center)
+		projection = d3.geo.mercator().scale(scaleFactor*scFactCorrection).center(center)
 		    .translate(offset);
 
 		// create the path
@@ -68,17 +75,15 @@ function computeProjection(fileJson, callback){
 		// these to determine better values for the scale and translation
 		var bounds  = path.bounds(geoJSON);
 
-		// Bad practice... OK for now but it's to change...
-		var heightScaleFactor = 1.7;
-		var hscale  = scale*width  / ((bounds[1][0] - bounds[0][0])*heightScaleFactor);
-		var vscale  = scale*height / (bounds[1][1] - bounds[0][1]);
-		scale   = (hscale < vscale) ? hscale : vscale;
+		var hscale  = scaleFactor*width  / ((bounds[1][0] - bounds[0][0]));
+		var vscale  = scaleFactor*height / (bounds[1][1] - bounds[0][1]);
+		scaleFactor   = (hscale < vscale) ? hscale : vscale;
 		offset  = [width - (bounds[0][0] + bounds[1][0])/2,
 		             height - (bounds[0][1] + bounds[1][1])/2];
 
 		// new projection
 		projection = d3.geo.mercator().center(center)
-			.scale(scale).translate(offset);
+			.scale(scaleFactor).translate(offset);
 		
 		// new path
 		path = path.projection(projection);
@@ -90,9 +95,6 @@ function computeProjection(fileJson, callback){
 }
 
 
-/************************************/
-/*           Load SF MAP            */
-/************************************/
 function loadMapElements(json, nextJsonToLoad, callback) {
 	var jsonNameSplitted = json.split(/\.|\//);
 	var type = jsonNameSplitted[jsonNameSplitted.length-2];
@@ -128,7 +130,7 @@ function loadMapElements(json, nextJsonToLoad, callback) {
 }
 
 // Start with requesting all the routes and creating the buttons
-function loadNextbusInformation(){
+function loadRoutesAndCreateButtons(){
 	obtainRoutes(createButtons);
 }
 
@@ -174,7 +176,14 @@ function createButtons() {
     });
 }
 
-// handy function for searching an object in an array through the value of a property
+// This starts the first steps. It computes the projection
+// (basing on streets.json) and loads the map
+computeProjection(files[1], function(){
+	loadMapElements(files[0], 1, loadRoutesAndCreateButtons);
+});
+
+
+// Handy function for searching an object in an array through the value of a property
 function arrayObjectIndexOf(myArray, property, searchTerm) {
     for(var i = 0; i < myArray.length; i++) {
         if (myArray[i][property] === searchTerm) return i;
@@ -182,49 +191,54 @@ function arrayObjectIndexOf(myArray, property, searchTerm) {
     return -1;
 }
 
-
+// When the user clicks on a button, we add the route in the list of routes, and update the svg
+// We check if the route was loaded before and, in case, we just move the path to the visible array
+// without reloading it through an API call
 function addRouteAndUpdate(route){
-	console.log("addRoute: ", route);
 	var index = arrayObjectIndexOf(hiddenRoutes, 'tag', route.tag);
-	console.log("Index: ", index);
-	// if it is a new route, then load the info about it
+	// If it is a new route, then load the info about it
 	selectedRoutes.push(route);
 	if(index === -1){
 		//load the pathOfTheRoute
-		console.log("obtainPaths...");
 		obtainPaths(route, updateSvg);
 	}else{
 		// it is an already loaded route but hidden
-		hiddenRoutes = hiddenRoutes.splice(index,1);
-		moveHiddenPathsToSelected(route, updateSvg);
+		hiddenRoutes.splice(index,1);
+		moveHiddensToSelected(route, updateSvg);
 	}
 }
 
+// In case the user clicks on for hiding a route, we just move that route to
+// the array of the hidden routes
 function removeRouteAndUpdate(route){
 	var index = arrayObjectIndexOf(selectedRoutes, 'tag', route.tag);
-	selectedRoutes = selectedRoutes.splice(index,1);
+	selectedRoutes.splice(index,1);
 	hiddenRoutes.push(route);
-	moveSelectedPathsToHidden(route, updateSvg);
+	
+	moveSelectedsToHidden(route, updateSvg);
 }
 
-
-function moveHiddenPathsToSelected(route, callback){
+function moveHiddensToSelected(route, callback){
 	selectedPaths = selectedPaths.concat(
-		hiddenPaths.filter(function(item){
+		hiddenPaths.filter(function (item){
 			return item.properties.routeTag === route.tag;
 		})
 	);
 
-	hiddenPaths = hiddenPaths.filter(function(item){
+	hiddenPaths = hiddenPaths.filter(function (item){
 					return item.properties.routeTag !== route.tag;
 				  });
+
+	vehiclesPerRoute[route.tag] = hiddenVehiclesPerRoute[route.tag];
+	hiddenVehiclesPerRoute[route.tag] = [];
+
 	if(callback){
 		callback();
 	}
 
 }
 
-function moveSelectedPathsToHidden(route, callback){
+function moveSelectedsToHidden(route, callback){
 	hiddenPaths = hiddenPaths.concat(
 		selectedPaths.filter(function(item){
 			return item.properties.routeTag === route.tag;
@@ -234,6 +248,9 @@ function moveSelectedPathsToHidden(route, callback){
 	selectedPaths = selectedPaths.filter(function(item){
 					return item.properties.routeTag !== route.tag;
 				  });
+
+	hiddenVehiclesPerRoute[route.tag] = vehiclesPerRoute[route.tag];
+	vehiclesPerRoute[route.tag] = [];
 	
 	if(callback){
 		callback();
@@ -241,28 +258,23 @@ function moveSelectedPathsToHidden(route, callback){
 
 }
 
-
 ////// Update svg with data stored inside the global variables.
 ////// updateSvg can be launched after that the arrays of vehicles and paths are updated.
 function updateSvg(){
 	drawPaths();
-	drawBuses();
+	loadBusesInformation(selectedRoutes[0] || [], 1, selectedRoutes, drawBuses);
 }	
 
-// drawPaths has to do three steps:
-//  1. update the coordinates of the paths that have new coords.
-//  2. add new paths, if any
-//  3. remove paths that are not on the maps anymore (or that are to hide because of a user request)
+// drawPaths has to do two steps:
+//  1. add new paths, if any
+//  2. remove paths that are not on the maps anymore (or that are to hide because of a user request)
 function drawPaths(){
 	var pathsToDraw = [];
-	console.log(selectedPaths);
+
 	var pathsOnSvg = svg.select('g.paths')
 						.selectAll('.routePath')
 						.data(selectedPaths);
 
-
-	console.log("pathsOnSvg:", pathsOnSvg.enter());
-	
 		pathsOnSvg
 			   .enter()
 			   .append('path')
@@ -283,73 +295,89 @@ function drawPaths(){
 //  3. remove vehicles that are not on the maps anymore (or that are to hide because of a user request)
 function drawBuses(){
 	selectedRoutes.forEach(function (route){
-		if(vehiclesPerRoute[route.tag]){
-			var busesOnSvg = svg.selectAll('.vehicle_'+route.tag)
-								.data(vehiclesPerRoute[route.tag], function(d){return d.id});
 
-			busesOnSvg
-				.update()
+		var busesOnSvg = svg.select('g.vehicles')
+							.selectAll('.vehicle_'+route.tag)
+							.data(vehiclesPerRoute[route.tag], function(d){return d.id});
+
+
+		busesOnSvg
+				.select('circle.vehicle')
 				  	.transition()
-				    .duration(1000)
+				    .duration(timeUpdate)
 				    .ease('linear')
-					.attr("transform", function (d) {
-						return 'translate('+projection([d.coordinates[1], d.coordinates[0]])[0]+','+projection([d.coordinates[1], d.coordinates[0]])[1]+')';
+					.attr("cx", function (d) {
+						return projection([d.coordinates[0], d.coordinates[1]])[0];
+					})
+					.attr("cy", function (d){
+						return projection([d.coordinates[0], d.coordinates[1]])[1];
 					});
 
-			busesOnSvg
-				.enter()
-					.append('g')
-						.attr("class", function(d) {
-								return "vehicle_" + route.tag;
-						})
-						.attr("id", function(d) {
-								return d.id;
-						})
+		busesOnSvg
+			.enter()
+				.append('g')
+					.attr("class", function (d) {
+							return "vehicle_" + route.tag;
+					})
+					.attr("id", function (d) {
+							return d.id;
+					})
 					.append("circle")
 					  	.attr("class", "vehicle")
-				    	.attr("cx", function(d) {
-				        	return projection([d.coordinates[1], d.coordinates[0]])[0];
+				    	.attr("cx", function (d) {
+				        	return projection([d.coordinates[0], d.coordinates[1]])[0];
 				        })
-				        .attr("cy", function(d) {
-				            return projection([d.coordinates[1], d.coordinates[0]])[1];
+				        .attr("cy", function (d) {
+				            return projection([d.coordinates[0], d.coordinates[1]])[1];
 				        })
-				    	.attr("r", 5)
-				    	.attr("fill", "#" + function(d) { return d.color; })
-				    .append("svg:title")
-		          		.text(function(d) { return "Route: " + route.tag + ", Vehicle: " + d.id + ", Speed: " + d.speed + " km/h"});
+						.attr("r", 6)
+						.attr("fill", function (d) {
+							return '#'+d.color || '#EEEEEE'; 
+				    	})
+				    	.on("click", function(d) {
+				    		// on click, show info about the vehicle
+				    		prepareAndShowTooltip(d, 
+				    					'<p><strong>Route: </strong>'+ route.tag +'</p>' +
+										'<p><strong>Vehicle: </strong>'+ d.id +'</p>' +
+										'<p><strong>Speed: </strong>'+ d.speed +' Km/h</p>'
+				    		);
 
-			busesOnSvg
-					.exit()
-						.remove();
+						})
+						.on('mouseout', function (d){
+							setTimeout(hideTooltip, 750);
+						})
+						.append('svg:title')
+							.text(function (d) {
+								// when hovering a vehicle, show the route tag name
+								return route.tag;
+						});
 
-		}
+		busesOnSvg
+				.exit()
+					.remove();
 
 	});
+
+	hiddenRoutes.forEach(function (hiddenRoute){
+		//remove the buses of hidden paths
+		svg.select('g.vehicles')
+			.selectAll('.vehicle_'+hiddenRoute.tag)
+				.remove();
+	});
+
+
 }
-
-
-
-///////////////////////////////////////////////////////////
-
-
-// This start the first steps. It compute the projection
-// (basing on streets.json) and load the map
-computeProjection(files[1], function(){
-	loadMapElements(files[0], 1, loadNextbusInformation);
-});
-
 
 function obtainPaths(route, callback){
 	var query = "http://webservices.nextbus.com/service/publicXMLFeed?command=routeConfig&a=sf-muni&r="+route.tag;
-	console.log(query);
 	d3.xml(query, function(error, data) {
-		console.log("data:", data);
 			d3.select(data)
 			   .selectAll('route')
 			   .each(function(){
 
 					var route = d3.select(this);
 					var tag   = route.attr('tag');
+					routesColor[tag] = route.attr('color');
 
 					// let's save the paths for the route...
 					route
@@ -365,51 +393,109 @@ function obtainPaths(route, callback){
 							selectedPaths.push({type: 'Feature', properties: {color: route.attr('color'), routeTag: tag}, geometry: {type: 'LineString', coordinates: coordinates }});
 						});
 		});
-		if(callback){
-			callback();
-		}
+
+		loadBusesInformation(route, null, null, callback);
+
 	});
 
 }
 
-
-function loadBusesInformation(route, next, lastTime, callback){
+function loadBusesInformation(route, next, routes, callback){
 	var query = "http://webservices.nextbus.com/service/publicXMLFeed?command=vehicleLocations&a=sf-muni&r="+route.tag+"&t="+lastTime;
-	console.log(query);
-	console.log("...loading buses information...");
-	d3.xml(query, function(error, data) {
-		console.log(data)
-				d3.select(data)
-				   .selectAll('vehicle')
-				   .each(function(){
-						
-					    var vehicle = d3.select(this);
-					    var item =	{
-					    				id			: vehicle.attr('id'),
-					    				dirTag		: vehicle.attr('dirTag'),
-					    				predictable : vehicle.attr('predictable'),
-					    				speed 		: vehicle.attr('speedKmHr'),
-										color		: routesColor[route.tag],
-										coordinates : [vehicle.attr('lat'), vehicle.attr('lon')]
-									};
-						
 
-						var list = vehiclesPerRoute[route.tag];
-						if(list){
-							vehiclesPerRoute[route.tag] = list.filter(function (e){ e.id !== item.id });
-							vehiclesPerRoute[route.tag].push(item);
-						}else{
-							vehiclesPerRoute[route.tag] = [item];
-						}
-					});
+	d3.xml(query, function(error, data) {
+		vehiclesPerRoute[route.tag] = vehiclesPerRoute[route.tag] || [];
+		hiddenVehiclesPerRoute[route.tag] = hiddenVehiclesPerRoute[route.tag] || [];
+
+		d3.select(data)
+		   .selectAll('vehicle')
+		   .each(function(){
+				
+				var vehicle = d3.select(this);
+				var item =	{
+								id			: vehicle.attr('id'),
+								dirTag		: vehicle.attr('dirTag'),
+								predictable : vehicle.attr('predictable'),
+								speed 		: vehicle.attr('speedKmHr'),
+								color		: routesColor[route.tag],
+								coordinates : [vehicle.attr('lon'), vehicle.attr('lat')]
+							};
+				
+				if(arrayObjectIndexOf(selectedRoutes, 'tag', route.tag) >= 0){
+					vehiclesPerRoute[route.tag] = vehiclesPerRoute[route.tag].filter(function (e){ return e.id !== item.id; });
+					vehiclesPerRoute[route.tag].push(item);
+				}else{
+					hiddenVehiclesPerRoute[route.tag] = hiddenVehiclesPerRoute[route.tag].filter(function (e){ return e.id !== item.id; });
+					hiddenVehiclesPerRoute[route.tag].push(item);
+				}
+				
+			});
 			
-			if(next >= selectedRoutes.length){
+		lastTime = d3.select(data).select('lastTime').attr('time');
+			
+		if(next){
+			if(next >= routes.length){
 				if(callback){
 					callback();
 				}
 			}else{
-				var newLastTime = d3.select(data).select('lastTime').attr('time');
-				loadBusesInformation(selectedRoutes[next], next+1, newLastTime, callback);
+				loadBusesInformation(routes[next], next+1, routes, callback);
+			}				
+		}else{
+			if(callback){
+				callback();
 			}
+		}
+		
 	});
 }
+
+/*************************/
+/*     Tooltip Stuff     */
+/*************************/
+// Define 'div' for tooltips
+var div = d3.select("body")
+	.append("div")  // declare the tooltip div 
+	.attr("class", "tooltip") // apply the 'tooltip' class
+	.style("opacity", 0); // set the opacity to nil
+
+
+d3.select('svg').on('click', function(d) {
+	hideTooltip();
+});
+
+
+function prepareAndShowTooltip(d, message){
+	div.transition()
+		.duration(500)	
+		.style("opacity", 0);
+	div.transition()
+		.duration(200)	
+		.style("opacity", .9);	
+	div	.html(message)
+		.style("left", (d3.event.pageX) + "px")			 
+		.style("top", (d3.event.pageY - 28) + "px");
+
+	d3.event.stopPropagation();
+}
+
+function hideTooltip(){
+	div.transition().duration(500).style('opacity', 0);
+}
+
+
+
+
+
+
+
+// Every 15 seconds, update the vehicles information...
+function loadInfo(time_win){
+	var routesToLoad = selectedRoutes.concat(hiddenRoutes);
+	if(routesToLoad[0]){
+		loadBusesInformation(routesToLoad[0], 1, routesToLoad, updateSvg);
+	}
+	setTimeout(function(){loadInfo(time_win) }, time_win);
+}
+
+loadInfo(timeUpdate);

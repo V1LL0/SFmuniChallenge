@@ -13,29 +13,22 @@
   		<div class="row">
   			<div class="col-md-8" id="sfMap"></div>
   			<div class="col-md-4 fixed-height" id="panel">
-          <div id="filterPanel">
+          <div id="sidePanel">
             <h1>SF Muni Challenge</h1>
 
-            <p>Buses</p>
+            <p>Instructions</p>
+            <div id="divInstructions">
+            </div>
 
+            <p>Buses</p>
             <div id="busesButtons">
             </div>
 
-            <div style="margin-top: 30px;">
-              <legend>Route Filter</legend>
-              <div class="col-md-12">
-                <!-- Possible filtering -->
-                <!-- <form class="form-group">
-                  <label>Type one or more route numbers to highlight them on the map</label>
-                  <input type="text" class="form-control" id="routeId" placeholder="e.g. kt 8ax 21 m">
-                </form> -->
-              </div>
-            </div>
           </div>
         </div>
       </div>
     </div>
-    
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.js"></script>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
     <script src="js/SFmuniChallenge.js"></script>
