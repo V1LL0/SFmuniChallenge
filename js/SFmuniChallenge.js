@@ -49,6 +49,13 @@ var selectedRoutes = [];
 var hiddenPaths = [];
 var selectedPaths = [];
 
+// loaded stops and hidden ones
+var stopsPerRoute = {};
+var hiddenStopsPerRoute = {};
+
+// variable to manage the show/hide of the stops
+var visibleStops = true;
+
 // variable last time, to load only changed data from nextbus API
 var lastTime = 0;
 
@@ -123,6 +130,9 @@ function loadMapElements(json, nextJsonToLoad, callback) {
 			  .classed('paths', true);
 			svg
 			  .append('g')
+			  .classed('stops', true);  
+			svg
+			  .append('g')
 			  .classed('vehicles', true);
 
 			if(callback){
@@ -179,6 +189,30 @@ function createButtons() {
         });
 		$("#busesButtons").append(newButton);
     });
+
+	$('#showHideStops').on('click', showHideStops);
+
+}
+
+function showHideStops(){
+	var btn = $('#showHideStops');
+	// if is showing...
+	if(btn.hasClass('btn-success')){
+		btn.removeClass('btn-success').addClass('btn-default');
+		svg.select('g.stops')
+			.selectAll('.stop')
+				.selectAll('image')
+					.style('visibility', 'hidden');
+		visibleStops = false;
+	}else{
+		btn.removeClass('btn-default').addClass('btn-success');
+		svg.select('g.stops')
+			.selectAll('.stop')
+				.selectAll('image')
+					.style('visibility', 'visible');
+		visibleStops = true;
+	}
+
 }
 
 // This starts the first steps. It computes the projection
@@ -205,7 +239,7 @@ function addRouteAndUpdate(route){
 	selectedRoutes.push(route);
 	if(index === -1){
 		//load the pathOfTheRoute
-		obtainPaths(route, updateSvg);
+		obtainPathsAndStops(route, updateSvg);
 	}else{
 		// it is an already loaded route but hidden
 		hiddenRoutes.splice(index,1);
@@ -237,6 +271,9 @@ function moveHiddensToSelected(route, callback){
 	vehiclesPerRoute[route.tag] = hiddenVehiclesPerRoute[route.tag];
 	hiddenVehiclesPerRoute[route.tag] = [];
 
+	stopsPerRoute[route.tag] = hiddenStopsPerRoute[route.tag];
+	hiddenStopsPerRoute[route.tag] = [];
+
 	if(callback){
 		callback();
 	}
@@ -256,6 +293,9 @@ function moveSelectedsToHidden(route, callback){
 
 	hiddenVehiclesPerRoute[route.tag] = vehiclesPerRoute[route.tag];
 	vehiclesPerRoute[route.tag] = [];
+
+	hiddenStopsPerRoute[route.tag] = stopsPerRoute[route.tag];
+	stopsPerRoute[route.tag] = [];
 	
 	if(callback){
 		callback();
@@ -267,7 +307,7 @@ function moveSelectedsToHidden(route, callback){
 ////// updateSvg can be launched after that the arrays of vehicles and paths are updated.
 function updateSvg(){
 	drawPaths();
-	loadBusesInformation(selectedRoutes[0] || [], 1, selectedRoutes, drawBuses);
+	loadBusesInformation(selectedRoutes[0] || [], 1, selectedRoutes, drawBusesAndStops);
 }	
 
 // drawPaths has to do two steps:
@@ -294,16 +334,17 @@ function drawPaths(){
 
 }
 
-// drawBuses has to do three steps:
+// drawBusesAndStops has to do three steps for buses
 //  1. update the coordinates of the buses that have new coords.
 //  2. add new vehicles, if any
 //  3. remove vehicles that are not on the maps anymore (or that are to hide because of a user request)
-function drawBuses(){
+// and then repeat for stops
+function drawBusesAndStops(){
 	selectedRoutes.forEach(function (route){
 
 		var busesOnSvg = svg.select('g.vehicles')
 							.selectAll('.vehicle_'+route.tag)
-							.data(vehiclesPerRoute[route.tag], function(d){return d.id});
+							.data(vehiclesPerRoute[route.tag], function(d){return d.id;});
 
 		busesOnSvg
 				.select('circle.vehicle')
@@ -340,7 +381,7 @@ function drawBuses(){
 				    	})
 				    	.on("click", function(d) {
 				    		// on click, show info about the vehicle
-				    		prepareAndShowTooltip(d, 
+				    		prepareAndShowTooltip(d3.event, 
 				    					'<p><strong>Route: </strong>'+ route.tag +'</p>' +
 										'<p><strong>Vehicle: </strong>'+ d.id +'</p>' +
 										'<p><strong>Speed: </strong>'+ d.speed +' Km/h</p>'
@@ -360,12 +401,51 @@ function drawBuses(){
 				.exit()
 					.remove();
 
+
+		/// drawing stops
+
+		var stopsOnSvg = svg.select('g.stops')
+					.selectAll('.stop_'+route.tag)
+					.data(stopsPerRoute[route.tag], function(d){return d.stopId || d.tag;});
+			console.log('stopsPerRoute: ', stopsPerRoute[route.tag]);
+			console.log('stopsPerRoute, enter: ', stopsOnSvg.enter());
+
+			var imageStopDimension = 10;
+
+			stopsOnSvg
+				.enter()
+				.append('g')
+					.attr('class', function (d){return 'stop stop_'+route.tag;})
+					.attr('id', function (d) {console.log('d: ', d);return d.stopId || d.tag;})
+					.append('svg:image')
+				        .attr('xlink:href', './images/bus_stop.png')
+				        .attr('x', function (d) {return projection([d.lon, d.lat])[0]-(imageStopDimension/2) ;} )
+				        .attr('y', function (d) {return projection([d.lon, d.lat])[1]-(imageStopDimension/2) ;} )
+				        .attr('width', imageStopDimension)
+				        .attr('height', imageStopDimension)
+				        .style('visibility', visibleStops ? 'visible' : 'hidden')
+				        .on('click', function (d){
+				        	obtainPredictions(d.stopId, d3.event);
+				        })
+						.on('mouseout', function (d){
+							setTimeout(hideTooltip, 750);
+						});
+
+
+		    stopsOnSvg
+		    	.exit().remove();
+
+
 	});
 
 	hiddenRoutes.forEach(function (hiddenRoute){
 		//remove the buses of hidden paths
 		svg.select('g.vehicles')
 			.selectAll('.vehicle_'+hiddenRoute.tag)
+				.remove();
+
+		svg.select('g.stops')
+			.selectAll('.stop_'+hiddenRoute.tag)
 				.remove();
 	});
 
@@ -387,20 +467,20 @@ function drawBuses(){
 
 }
 
-function obtainPaths(route, callback){
+function obtainPathsAndStops(route, callback){
 	var query = "http://webservices.nextbus.com/service/publicXMLFeed?command=routeConfig&a=sf-muni&r="+route.tag;
 	d3.xml(query, function(error, data) {
-			d3.select(data)
-			   .selectAll('route')
-			   .each(function(){
+			// Paths
+			var thisRoute = d3.select(data)
+			   					.select('route');
+			   
 
-					var route = d3.select(this);
-					var tag   = route.attr('tag');
-					routesColor[tag] = route.attr('color');
+					var tag   = thisRoute.attr('tag');
+					routesColor[tag] = thisRoute.attr('color');
 
 					var idPath = 1;
 					// let's save the paths for the route...
-					route
+					thisRoute
 				    	.selectAll('path')
 				        .each(function(){
 							var coordinates = [];
@@ -410,9 +490,27 @@ function obtainPaths(route, callback){
 				            	coordinates.push([ +point.attr('lon'), +point.attr('lat'), 0]);
 							});
 
-							selectedPaths.push({type: 'Feature', id:tag+'-'+idPath++, properties: {color: route.attr('color'), routeTag: tag}, geometry: {type: 'LineString', coordinates: coordinates }});
+							selectedPaths.push({type: 'Feature', id:tag+'-'+idPath++, properties: {color: thisRoute.attr('color'), routeTag: tag}, geometry: {type: 'LineString', coordinates: coordinates }});
 						});
-		});
+
+			stopsPerRoute[route.tag] = stopsPerRoute[route.tag] || [];
+			thisRoute
+					.selectAll('stop')
+						.each(function(){
+							var stop = d3.select(this);
+
+							if(stop.attr('title')){
+								stopsPerRoute[route.tag].push(
+									{
+										tag : stop.attr('tag'),
+										title : stop.attr('title'),
+										lat : stop.attr('lat'),
+										lon : stop.attr('lon'),
+										stopId : stop.attr('stopId')
+									}
+								);
+							}
+						});
 
 		loadBusesInformation(route, null, null, callback);
 
@@ -470,6 +568,47 @@ function loadBusesInformation(route, next, routes, callback){
 	});
 }
 
+function obtainPredictions(stopId, evt){
+	var query = 'http://webservices.nextbus.com/service/publicXMLFeed?command=predictions&a=sf-muni&stopId='+stopId;
+	var message = "";
+
+	d3.xml(query, function(error, data) {
+		d3.select(data)
+			.selectAll('predictions')
+				.each(function(){
+					var route = d3.select(this);
+					message += '<strong> Route: ' + route.attr('routeTitle') + '</strong>'
+					
+					message += '<ul>';
+					route.selectAll('direction')
+						.each(function(){
+							var dir = d3.select(this);
+							message += '<li>' + dir.attr('title') + '</li>'
+
+							var maxPredictionPerDir = 2;
+							var iterator = 0;
+							message += '<ul>'
+							dir.selectAll('prediction')
+								.each(function (){
+									if(iterator < maxPredictionPerDir){
+										var predict = d3.select(this);
+										message += '<li> Vehicle: ' + predict.attr('vehicle') + ' in: '+predict.attr('minutes')+' min </li>';
+										iterator++;
+									}
+								})
+							message += '</ul>';
+						})
+						message += '</ul>'
+				});
+
+		prepareAndShowTooltip(evt, message);
+
+	});
+
+}
+
+
+
 /*************************/
 /*     Tooltip Stuff     */
 /*************************/
@@ -485,7 +624,7 @@ d3.select('svg').on('click', function(d) {
 });
 
 
-function prepareAndShowTooltip(d, message){
+function prepareAndShowTooltip(evt, message){
 	div.transition()
 		.duration(500)	
 		.style("opacity", 0);
@@ -493,19 +632,15 @@ function prepareAndShowTooltip(d, message){
 		.duration(200)	
 		.style("opacity", .9);	
 	div	.html(message)
-		.style("left", (d3.event.pageX) + "px")			 
-		.style("top", (d3.event.pageY - 28) + "px");
+		.style("left", (evt.pageX) + "px")			 
+		.style("top", (evt.pageY - 28) + "px");
 
-	d3.event.stopPropagation();
+	evt.stopPropagation();
 }
 
 function hideTooltip(){
 	div.transition().duration(500).style('opacity', 0);
 }
-
-
-
-
 
 
 
