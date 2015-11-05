@@ -52,6 +52,9 @@ var selectedPaths = [];
 // variable last time, to load only changed data from nextbus API
 var lastTime = 0;
 
+// indicate if there is a route request from a button and it is currently loading
+var loading = false;
+var routesLoading = []; // the routes that are currently loading because of a button
 
 /************************************/
 /* Compute and visualize the SF map */
@@ -160,17 +163,19 @@ function obtainRoutes(callback){
 
 function createButtons() {
 	allRoutes.forEach(function (route){
-        var newButton= $('<input type="button" value="'+route.tag+'" class="btn btn-default btnRoute"/>');
+        var newButton= $('<input type="button" id="button_'+route.tag+'" value="'+route.tag+'" class="btn btn-default btnRoute"/>');
         newButton.on('click', function(){ 
         	if(newButton.hasClass("btn-default")){
-        		newButton.removeClass("btn-default");
-        		newButton.addClass("btn-warning");
+        		newButton.removeClass("btn-default")
+        				 .addClass("btn-warning disabled hadDefault");
         		addRouteAndUpdate(route);
         	}else{
-        		newButton.removeClass("btn-warning");
-        		newButton.addClass("btn-default");
+        		newButton.removeClass("btn-success")
+        				 .addClass("btn-warning disabled hadSuccess");
         		removeRouteAndUpdate(route);
         	}
+			loading = true;
+        	routesLoading.push(route);
         });
 		$("#busesButtons").append(newButton);
     });
@@ -364,6 +369,21 @@ function drawBuses(){
 				.remove();
 	});
 
+	if(loading){
+		routesLoading.forEach(function (route){
+			var btn = $('#button_'+route.tag);
+			btn.removeClass("btn-warning disabled");
+			if(btn.hasClass("hadDefault")){
+				btn.removeClass("hadDefault")
+				   .addClass("btn-success");
+			}else{
+				btn.removeClass("hadSuccess")
+				   .addClass("btn-default");
+			}
+		});
+		loading = false;
+		routesLoading = [];
+	}
 
 }
 
