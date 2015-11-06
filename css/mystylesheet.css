@@ -4,15 +4,20 @@
 
       #panel {
         background-color: rgb(238,233,233);
+        margin-bottom: -2%;
       }
 
       #sidePanel {
-        margin-top: 50px;
+        margin-bottom: 50px;
+      }
+
+      #busesButtons {
+        margin-bottom: 30px; 
       }
       
-      .fixed-height {
+      .auto-height {
         overflow-y: auto;
-        min-height: 1100px;
+        min-height: auto; /* auto, to avoid problems with different screen resolutions */
       }
 
       .btnRoute {

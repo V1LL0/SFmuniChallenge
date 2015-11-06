@@ -63,6 +63,7 @@ var lastTime = 0;
 var loading = false;
 var routesLoading = []; // the routes that are currently loading because of a button
 
+
 /************************************/
 /* Compute and visualize the SF map */
 /************************************/
@@ -216,12 +217,12 @@ function showHideStops(){
 
 }
 
+
 // This starts the first steps. It computes the projection
 // (basing on streets.json) and loads the map
 computeProjection(files[1], function(){
 	loadMapElements(files[0], 1, loadRoutesAndCreateButtons);
 });
-
 
 // Handy function for searching an object in an array through the value of a property
 function arrayObjectIndexOf(myArray, property, searchTerm) {
@@ -303,6 +304,157 @@ function moveSelectedsToHidden(route, callback){
 	}
 
 }
+
+/********************************/
+/*  Call xml commands functions */
+/********************************/
+
+function obtainPathsAndStops(route, callback){
+	var query = "http://webservices.nextbus.com/service/publicXMLFeed?command=routeConfig&a=sf-muni&r="+route.tag;
+	d3.xml(query, function(error, data) {
+			// Paths
+			var thisRoute = d3.select(data)
+			   					.select('route');
+			   
+
+					var tag   = thisRoute.attr('tag');
+					routesColor[tag] = thisRoute.attr('color');
+
+					var idPath = 1;
+					// let's save the paths for the route...
+					thisRoute
+				    	.selectAll('path')
+				        .each(function(){
+							var coordinates = [];
+
+				        	d3.select(this).selectAll('point').each(function(){
+				            	var point = d3.select(this);
+				            	coordinates.push([ +point.attr('lon'), +point.attr('lat'), 0]);
+							});
+
+							selectedPaths.push({type: 'Feature', id:tag+'-'+idPath++, properties: {color: thisRoute.attr('color'), routeTag: tag}, geometry: {type: 'LineString', coordinates: coordinates }});
+						});
+
+			stopsPerRoute[route.tag] = stopsPerRoute[route.tag] || [];
+			thisRoute
+					.selectAll('stop')
+						.each(function(){
+							var stop = d3.select(this);
+
+							if(stop.attr('title')){
+								stopsPerRoute[route.tag].push(
+									{
+										tag : stop.attr('tag'),
+										title : stop.attr('title'),
+										lat : stop.attr('lat'),
+										lon : stop.attr('lon'),
+										stopId : stop.attr('stopId')
+									}
+								);
+							}
+						});
+
+		loadBusesInformation(route, null, null, callback);
+
+	});
+
+}
+
+
+function obtainPredictions(stopId, evt){
+	var query = 'http://webservices.nextbus.com/service/publicXMLFeed?command=predictions&a=sf-muni&stopId='+stopId;
+	var message = "";
+
+	d3.xml(query, function(error, data) {
+		d3.select(data)
+			.selectAll('predictions')
+				.each(function(){
+					var route = d3.select(this);
+					message += '<strong> Route: ' + route.attr('routeTitle') + '</strong>'
+					
+					message += '<ul>';
+					route.selectAll('direction')
+						.each(function(){
+							var dir = d3.select(this);
+							message += '<li>' + dir.attr('title') + '</li>'
+
+							var maxPredictionPerDir = 2;
+							var iterator = 0;
+							message += '<ul>'
+							dir.selectAll('prediction')
+								.each(function (){
+									if(iterator < maxPredictionPerDir){
+										var predict = d3.select(this);
+										message += '<li> Vehicle: ' + predict.attr('vehicle') + ' in: '+predict.attr('minutes')+' min </li>';
+										iterator++;
+									}
+								})
+							message += '</ul>';
+						})
+						message += '</ul>'
+				});
+
+		prepareAndShowTooltip(evt, message);
+
+	});
+
+}
+
+
+function loadBusesInformation(route, next, routes, callback){
+	var query = "http://webservices.nextbus.com/service/publicXMLFeed?command=vehicleLocations&a=sf-muni&r="+route.tag+"&t="+lastTime;
+
+	d3.xml(query, function(error, data) {
+		vehiclesPerRoute[route.tag] = vehiclesPerRoute[route.tag] || [];
+		hiddenVehiclesPerRoute[route.tag] = hiddenVehiclesPerRoute[route.tag] || [];
+
+		d3.select(data)
+		   .selectAll('vehicle')
+		   .each(function(){
+				
+				var vehicle = d3.select(this);
+				var item =	{
+								id			: vehicle.attr('id'),
+								dirTag		: vehicle.attr('dirTag'),
+								predictable : vehicle.attr('predictable'),
+								speed 		: vehicle.attr('speedKmHr'),
+								color		: routesColor[route.tag],
+								coordinates : [vehicle.attr('lon'), vehicle.attr('lat')]
+							};
+				
+				if(arrayObjectIndexOf(selectedRoutes, 'tag', route.tag) >= 0){
+					vehiclesPerRoute[route.tag] = vehiclesPerRoute[route.tag].filter(function (e){ return e.id !== item.id; });
+					vehiclesPerRoute[route.tag].push(item);
+				}else{
+					hiddenVehiclesPerRoute[route.tag] = hiddenVehiclesPerRoute[route.tag].filter(function (e){ return e.id !== item.id; });
+					hiddenVehiclesPerRoute[route.tag].push(item);
+				}
+				
+			});
+			
+		lastTime = d3.select(data).select('lastTime').attr('time');
+			
+		if(next){
+			if(next >= routes.length){
+				if(callback){
+					callback();
+				}
+			}else{
+				loadBusesInformation(routes[next], next+1, routes, callback);
+			}				
+		}else{
+			if(callback){
+				callback();
+			}
+		}
+		
+	});
+}
+
+
+/**********************/
+/*  Drawing functions */
+/**********************/
 
 ////// Update svg with data stored inside the global variables.
 ////// updateSvg can be launched after that the arrays of vehicles and paths are updated.
@@ -460,147 +612,6 @@ function drawBusesAndStops(){
 
 }
 
-function obtainPathsAndStops(route, callback){
-	var query = "http://webservices.nextbus.com/service/publicXMLFeed?command=routeConfig&a=sf-muni&r="+route.tag;
-	d3.xml(query, function(error, data) {
-			// Paths
-			var thisRoute = d3.select(data)
-			   					.select('route');
-			   
-
-					var tag   = thisRoute.attr('tag');
-					routesColor[tag] = thisRoute.attr('color');
-
-					var idPath = 1;
-					// let's save the paths for the route...
-					thisRoute
-				    	.selectAll('path')
-				        .each(function(){
-							var coordinates = [];
-
-				        	d3.select(this).selectAll('point').each(function(){
-				            	var point = d3.select(this);
-				            	coordinates.push([ +point.attr('lon'), +point.attr('lat'), 0]);
-							});
-
-							selectedPaths.push({type: 'Feature', id:tag+'-'+idPath++, properties: {color: thisRoute.attr('color'), routeTag: tag}, geometry: {type: 'LineString', coordinates: coordinates }});
-						});
-
-			stopsPerRoute[route.tag] = stopsPerRoute[route.tag] || [];
-			thisRoute
-					.selectAll('stop')
-						.each(function(){
-							var stop = d3.select(this);
-
-							if(stop.attr('title')){
-								stopsPerRoute[route.tag].push(
-									{
-										tag : stop.attr('tag'),
-										title : stop.attr('title'),
-										lat : stop.attr('lat'),
-										lon : stop.attr('lon'),
-										stopId : stop.attr('stopId')
-									}
-								);
-							}
-						});
-
-		loadBusesInformation(route, null, null, callback);
-
-	});
-
-}
-
-function loadBusesInformation(route, next, routes, callback){
-	var query = "http://webservices.nextbus.com/service/publicXMLFeed?command=vehicleLocations&a=sf-muni&r="+route.tag+"&t="+lastTime;
-
-	d3.xml(query, function(error, data) {
-		vehiclesPerRoute[route.tag] = vehiclesPerRoute[route.tag] || [];
-		hiddenVehiclesPerRoute[route.tag] = hiddenVehiclesPerRoute[route.tag] || [];
-
-		d3.select(data)
-		   .selectAll('vehicle')
-		   .each(function(){
-				
-				var vehicle = d3.select(this);
-				var item =	{
-								id			: vehicle.attr('id'),
-								dirTag		: vehicle.attr('dirTag'),
-								predictable : vehicle.attr('predictable'),
-								speed 		: vehicle.attr('speedKmHr'),
-								color		: routesColor[route.tag],
-								coordinates : [vehicle.attr('lon'), vehicle.attr('lat')]
-							};
-				
-				if(arrayObjectIndexOf(selectedRoutes, 'tag', route.tag) >= 0){
-					vehiclesPerRoute[route.tag] = vehiclesPerRoute[route.tag].filter(function (e){ return e.id !== item.id; });
-					vehiclesPerRoute[route.tag].push(item);
-				}else{
-					hiddenVehiclesPerRoute[route.tag] = hiddenVehiclesPerRoute[route.tag].filter(function (e){ return e.id !== item.id; });
-					hiddenVehiclesPerRoute[route.tag].push(item);
-				}
-				
-			});
-			
-		lastTime = d3.select(data).select('lastTime').attr('time');
-			
-		if(next){
-			if(next >= routes.length){
-				if(callback){
-					callback();
-				}
-			}else{
-				loadBusesInformation(routes[next], next+1, routes, callback);
-			}				
-		}else{
-			if(callback){
-				callback();
-			}
-		}
-		
-	});
-}
-
-function obtainPredictions(stopId, evt){
-	var query = 'http://webservices.nextbus.com/service/publicXMLFeed?command=predictions&a=sf-muni&stopId='+stopId;
-	var message = "";
-
-	d3.xml(query, function(error, data) {
-		d3.select(data)
-			.selectAll('predictions')
-				.each(function(){
-					var route = d3.select(this);
-					message += '<strong> Route: ' + route.attr('routeTitle') + '</strong>'
-					
-					message += '<ul>';
-					route.selectAll('direction')
-						.each(function(){
-							var dir = d3.select(this);
-							message += '<li>' + dir.attr('title') + '</li>'
-
-							var maxPredictionPerDir = 2;
-							var iterator = 0;
-							message += '<ul>'
-							dir.selectAll('prediction')
-								.each(function (){
-									if(iterator < maxPredictionPerDir){
-										var predict = d3.select(this);
-										message += '<li> Vehicle: ' + predict.attr('vehicle') + ' in: '+predict.attr('minutes')+' min </li>';
-										iterator++;
-									}
-								})
-							message += '</ul>';
-						})
-						message += '</ul>'
-				});
-
-		prepareAndShowTooltip(evt, message);
-
-	});
-
-}
-
-
 
 /*************************/
 /*     Tooltip Stuff     */
@@ -635,7 +646,9 @@ function hideTooltip(){
 	div.transition().duration(500).style('opacity', 0);
 }
 
-
+/*************************/
+/*  Update every 15 secs */
+/*************************/
 
 // Every 15 seconds, update the vehicles information...
 function loadInfo(time_win){
